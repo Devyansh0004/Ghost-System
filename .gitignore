@@ -1,0 +1,22 @@
+# --- User Requested Exclusions ---
+trajectories/
+data/
+env/
+.env
+
+# --- Project Specific ---
+meeting_screenshots/
+groups.json
+
+# --- Python Standard ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+
+# --- OS Specific (Optional but recommended) ---
+.DS_Store
+Thumbs.db
