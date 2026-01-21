@@ -1,95 +1,92 @@
+#!/usr/bin/env python3
 import asyncio
-import json
 import os
-# CHECK: Ensure this matches your file name in agents/ (likely scrape_group.py)
-from agents.scraper_agent import scrape_whatsapp_group 
-from agents.alarm_agent import set_event_alarm
-# UPDATE: Import the new smart agent
-from agents.meeting_agent import join_meeting_smart
+import json
+import subprocess
+import nest_asyncio
+from dotenv import load_dotenv
+from droidrun import DroidAgent
+from droidrun.config_manager.config_manager import DroidrunConfig, AgentConfig, LoggingConfig, ManagerConfig, ExecutorConfig
+from llama_index.llms.google_genai import GoogleGenAI
 
+# 1. Initialize environment
+nest_asyncio.apply() 
+load_dotenv()
+
+# --- 🛠️ AGENT BRIDGES (Calling your scripts as processes) ---
+def run_scraper_agent(group_name: str):
+    """Triggers your scraper_agent.py script."""
+    print(f"   🚀 Launching Scraper Agent for: {group_name}")
+    # Using 'python3 agents/scraper_agent.py' assuming the structure from your image
+    result = subprocess.run(
+        ["python3", "-c", f"import asyncio; from agents.scraper_agent import scrape_whatsapp_group; asyncio.run(scrape_whatsapp_group('{group_name}'))"],
+        capture_output=True, text=True
+    )
+    return result.stdout
+
+def run_alarm_agent(name: str, time: str):
+    """Triggers your alarm_agent.py script."""
+    print(f"   ⏰ Launching Alarm Agent: {name} at {time}")
+    result = subprocess.run(
+        ["python3", "-c", f"import asyncio; from agents.alarm_agent import set_event_alarm; asyncio.run(set_event_alarm('{name}', '{time}'))"],
+        capture_output=True, text=True
+    )
+    return result.stdout
+
+# --- HELPER FUNCTIONS ---
 def load_groups(filename="groups.json"):
-    """Loads the list of groups from the JSON file."""
+    if not os.path.exists(filename): return []
     try:
-        if not os.path.exists(filename):
-            print(f"⚠️ Error: {filename} not found.")
-            return []
-            
         with open(filename, "r") as f:
-            groups = json.load(f)
-            
-        if not isinstance(groups, list):
-            print(f"⚠️ Error: {filename} must contain a list of strings.")
-            return []
-            
-        return groups
-    except json.JSONDecodeError:
-        print(f"⚠️ Error: {filename} contains invalid JSON.")
-        return []
-
-async def process_scraped_data(group_name):
-    """Reads the JSON data for a group and triggers Alarms/Meetings."""
-    file_path = f"data/{group_name.replace(' ', '_')}_data.json"
-    
-    if not os.path.exists(file_path):
-        print(f"⚠️ No data file found for {group_name}")
-        return
-
-    with open(file_path, "r") as f:
-        data = json.load(f)
-
-    # 1. Process Events -> Set Alarms
-    events = data.get("events", [])
-    if events:
-        print(f"\n⏰ Found {len(events)} events in '{group_name}'. Setting alarms...")
-        for event in events:
-            # Check if time exists and is not null
-            if event.get("time") and event.get("name"):
-                await set_event_alarm(event["name"], event["time"])
-                await asyncio.sleep(2) # Pause between alarms
-
-    # 2. Process Meetings -> Join the first one (For Demo)
-    meetings = data.get("meetings", [])
-    if meetings:
-        first_meeting = meetings[0]
-        print(f"\n🎥 Found meeting in '{group_name}': {first_meeting.get('name', 'Unknown')}")
-        print("   Invoking Smart Meeting Agent...")
-        
-        # UPDATE: We now pass the WHOLE dictionary, not just the link.
-        # The agent will extract ID/Code/Link from this object.
-        await join_meeting_smart(first_meeting)
-    else:
-        print("ℹ️ No meetings found in this group.")
+            data = json.load(f)
+            return [g for g in data if isinstance(g, str)]
+    except Exception: return []
 
 async def main():
-    print("🚀 DroidRun Assistant Starting...")
+    print("👻 Ghost System: Intelligent Router Starting...")
     
-    # 1. Load Target Groups
-    target_groups = load_groups()
+    # Setup LLM - Using Gemini 2.5 Flash for the router
+    llm = GoogleGenAI(api_key=os.environ["GEMINI_API_KEY"], model="models/gemini-2.5-flash")
     
-    if not target_groups:
-        print("❌ No groups found in groups.json. Exiting.")
-        return
+    config = DroidrunConfig(
+        agent=AgentConfig(reasoning=True, max_steps=50),
+        logging=LoggingConfig(debug=True, save_trajectory="action")
+    )
 
-    print(f"📋 Processing {len(target_groups)} groups: {target_groups}\n")
+    while True:
+        print("\n" + "="*40 + "\n🤖 Ghost System Command Center\n" + "="*40)
+        print("1. 🟢 Task: Specific Workflow (Join Meeting and set events based on chat data from Whatsapp")
+        print("2. 🔵 Task: Generic / Custom Request")
+        print("q. 🔴 Quit")
+        
+        choice = input("\n👉 Select Option: ").strip().lower()
+        if choice == 'q': break
 
-    # 2. Iterate through each group
-    for group in target_groups:
-        print(f"--- 🟢 Starting Workflow for '{group}' ---")
-        
-        # Step A: Scrape Data
-        success = await scrape_whatsapp_group(group)
-        
-        if success:
-            # Step B: Act on Data (Alarms & Meetings)
-            print(f"   ✅ Scrape successful. Processing actions...")
-            await process_scraped_data(group)
-        else:
-            print(f"   ❌ Scrape failed for '{group}'. Skipping actions.")
-        
-        print(f"--- 🔴 Completed '{group}' ---\n")
-        await asyncio.sleep(3) # Cool down between groups
+        if choice == '1':
+            target_groups = load_groups() #
+            for group in target_groups:
+                print(f"\n--- 🟢 Workflow: '{group}' ---")
+                
+                # Step 1: Run your Scraper Agent first manually
+                scrape_output = run_scraper_agent(group)
+                print(f"   📝 Scraper Result: {scrape_output}")
+                
+                # Step 2: Use the Main Agent to process the findings
+                task_goal = (
+                    f"I have just run the scraper for '{group}'. Here is the data found: {scrape_output}\n\n"
+                    f"GOAL: Based on this data, navigate the phone to join any meetings "
+                    f"using Zoom/Meet or set event details on GGOGLE TASK app."
+                )
+                
+                agent = DroidAgent(goal=task_goal, config=config, llms=llm)
+                await agent.run()
 
-    print("\n🏁 All assistant tasks complete.")
+        elif choice == '2':
+            user_prompt = input("   💬 Describe your task: ")
+            agent = DroidAgent(goal=user_prompt, config=config, llms=llm)
+            await agent.run()
+
+    print("🏁 System Shutdown.")
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -3,3 +3,4 @@ droidrun[google,dev]
 llama-index-llms-google-genai
 pydantic
 jinja2
+nest_asyncio
